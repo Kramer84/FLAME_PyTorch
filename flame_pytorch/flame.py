@@ -1,30 +1,3 @@
-"""
-FLAME Layer: Implementation of the 3D Statistical Face model in PyTorch
-
-It is designed in a way to directly plug in as a decoder layer in a
-Deep learning framework for training and testing
-
-It can also be used for 2D or 3D optimisation applications
-
-Author: Soubhik Sanyal
-Copyright (c) 2019, Soubhik Sanyal
-All rights reserved.
-
-Max-Planck-Gesellschaft zur Foerderung der Wissenschaften e.V. (MPG) is holder of all proprietary rights on this
-computer program.
-You can only use this computer program if you have closed a license agreement with MPG or you get the right to use
-the computer program from someone who is authorized to grant you that right.
-Any use of the computer program without a valid license is prohibited and liable to prosecution.
-Copyright 2019 Max-Planck-Gesellschaft zur Foerderung der Wissenschaften e.V. (MPG). acting on behalf of its
-Max Planck Institute for Intelligent Systems and the Max Planck Institute for Biological Cybernetics.
-All rights reserved.
-
-More information about FLAME is available at http://flame.is.tue.mpg.de.
-
-For questions regarding the PyTorch implementation please contact soubhik.sanyal@tuebingen.mpg.de
-"""
-# Modified from smplx code [https://github.com/vchoutas/smplx] for FLAME
-
 import pickle
 
 import numpy as np
@@ -35,11 +8,6 @@ from smplx.utils import Struct, rot_mat_to_euler, to_np, to_tensor
 
 
 class FLAME(nn.Module):
-    """
-    Given flame parameters this class generates a differentiable FLAME function
-    which outputs the a mesh and 3D facial landmarks
-    """
-
     def __init__(self, config):
         super(FLAME, self).__init__()
         print("creating the FLAME Decoder")
@@ -55,9 +23,6 @@ class FLAME(nn.Module):
             to_tensor(to_np(self.faces, dtype=np.int64), dtype=torch.long),
         )
 
-        # Fixing remaining Shape betas
-        # There are total 300 shape parameters to control FLAME; But one can use the first few parameters to express
-        # the shape. For example 100 shape parameters are used for RingNet project
         default_shape = torch.zeros(
             [self.batch_size, 300 - config.shape_params],
             dtype=self.dtype,
@@ -67,9 +32,6 @@ class FLAME(nn.Module):
             "shape_betas", nn.Parameter(default_shape, requires_grad=False)
         )
 
-        # Fixing remaining expression betas
-        # There are total 100 shape expression parameters to control FLAME; But one can use the first few parameters to express
-        # the expression. For example 50 expression parameters are used for RingNet project
         default_exp = torch.zeros(
             [self.batch_size, 100 - config.expression_params],
             dtype=self.dtype,
@@ -79,7 +41,6 @@ class FLAME(nn.Module):
             "expression_betas", nn.Parameter(default_exp, requires_grad=False)
         )
 
-        # Eyeball and neck rotation
         default_eyball_pose = torch.zeros(
             [self.batch_size, 6], dtype=self.dtype, requires_grad=False
         )
@@ -94,8 +55,6 @@ class FLAME(nn.Module):
             "neck_pose", nn.Parameter(default_neck_pose, requires_grad=False)
         )
 
-        # Fixing 3D translation since we use translation in the image plane
-
         self.use_3D_translation = config.use_3D_translation
 
         default_transl = torch.zeros(
@@ -105,26 +64,22 @@ class FLAME(nn.Module):
             "transl", nn.Parameter(default_transl, requires_grad=False)
         )
 
-        # The vertices of the template model
         self.register_buffer(
             "v_template",
             to_tensor(to_np(self.flame_model.v_template), dtype=self.dtype),
         )
 
-        # The shape components
         shapedirs = self.flame_model.shapedirs
-        # The shape components
+
         self.register_buffer("shapedirs", to_tensor(to_np(shapedirs), dtype=self.dtype))
 
         j_regressor = to_tensor(to_np(self.flame_model.J_regressor), dtype=self.dtype)
         self.register_buffer("J_regressor", j_regressor)
 
-        # Pose blend shape basis
         num_pose_basis = self.flame_model.posedirs.shape[-1]
         posedirs = np.reshape(self.flame_model.posedirs, [-1, num_pose_basis]).T
         self.register_buffer("posedirs", to_tensor(to_np(posedirs), dtype=self.dtype))
 
-        # indices of parents for each joints
         parents = to_tensor(to_np(self.flame_model.kintree_table[0])).long()
         parents[0] = -1
         self.register_buffer("parents", parents)
@@ -132,8 +87,6 @@ class FLAME(nn.Module):
         self.register_buffer(
             "lbs_weights", to_tensor(to_np(self.flame_model.weights), dtype=self.dtype)
         )
-
-        # Static and Dynamic Landmark embeddings for FLAME
 
         with open(config.static_landmark_embedding_path, "rb") as f:
             static_embeddings = Struct(**pickle.load(f, encoding="latin1"))
@@ -185,19 +138,6 @@ class FLAME(nn.Module):
         neck_kin_chain,
         dtype=torch.float32,
     ):
-        """
-        Selects the face contour depending on the reletive position of the head
-        Input:
-            vertices: N X num_of_vertices X 3
-            pose: N X full pose
-            dynamic_lmk_faces_idx: The list of contour face indexes
-            dynamic_lmk_b_coords: The list of contour barycentric weights
-            neck_kin_chain: The tree to consider for the relative rotation
-            dtype: Data type
-        return:
-            The contour face indexes and the corresponding barycentric weights
-        Source: Modified for batches from https://github.com/vchoutas/smplx
-        """
 
         batch_size = vertices.shape[0]
 
@@ -234,15 +174,7 @@ class FLAME(nn.Module):
         eye_pose=None,
         transl=None,
     ):
-        """
-        Input:
-            shape_params: N X number of shape parameters
-            expression_params: N X number of expression parameters
-            pose_params: N X number of pose parameters
-        return:
-            vertices: N X V X 3
-            landmarks: N X number of landmarks X 3
-        """
+
         betas = torch.cat(
             [shape_params, self.shape_betas, expression_params, self.expression_betas],
             dim=1,
@@ -271,7 +203,6 @@ class FLAME(nn.Module):
             self.batch_size, 1, 1
         )
         if self.use_face_contour:
-
             (
                 dyn_lmk_faces_idx,
                 dyn_lmk_bary_coords,

@@ -1,2 +1,2 @@
-from .config import get_config
+from .config import FLAMEConfig
 from .flame import FLAME
